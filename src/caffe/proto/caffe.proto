@@ -98,7 +98,7 @@ message NetParameter {
 // NOTE
 // Update the next available ID when you add a new SolverParameter field.
 //
-// SolverParameter next available ID: 42 (last added: layer_wise_reduce)
+// SolverParameter next available ID: 43 (last added: init_patience)
 message SolverParameter {
   //////////////////////////////////////////////////////////////////////////////
   // Specifying the train and test networks
@@ -239,6 +239,11 @@ message SolverParameter {
   }
   // DEPRECATED: use type instead of solver_type
   optional SolverType solver_type = 30 [default = SGD];
+  
+  //Stopping criterion parameters added by AMOGH/NICOLAI
+  optional string stopper_name = 41 [default = ""];
+  optional int32 init_patience = 42 [default = 15]; // Give -ve value to maintain lowest value as high score (e.g., to maintain best loss); else +ve value (e.g., for best accuracy)
+
 
   // Overlap compute and communication for data parallel training
   optional bool layer_wise_reduce = 41 [default = true];
@@ -309,7 +314,7 @@ message ParamSpec {
 // NOTE
 // Update the next available ID when you add a new LayerParameter field.
 //
-// LayerParameter next available layer-specific ID: 147 (last added: recurrent_param)
+// LayerParameter next available layer-specific ID: 148 (last added: lp_param)
 message LayerParameter {
   optional string name = 1; // the layer name
   optional string type = 2; // the layer type
@@ -397,8 +402,10 @@ message LayerParameter {
   optional ReductionParameter reduction_param = 136;
   optional ReLUParameter relu_param = 123;
   optional ReshapeParameter reshape_param = 133;
+
   optional ScaleParameter scale_param = 142;
   optional SigmoidParameter sigmoid_param = 124;
+
   optional SoftmaxParameter softmax_param = 125;
   optional SPPParameter spp_param = 132;
   optional SliceParameter slice_param = 126;
@@ -860,6 +867,13 @@ message LRNParameter {
     CUDNN = 2;
   }
   optional Engine engine = 6 [default = DEFAULT];
+  // Whether or not to skip the LRN layer during a deconv pass.  If   //DEEPVIS manual addition
+  // this is true, activations in a deconv will pass through the LRN  //DEEPVIS manual addition
+  // layer unaffected. If it is false, deconv activations will be     //DEEPVIS manual addition
+  // affected by LRN layers the same as backprop diffs are (will pass //DEEPVIS manual addition
+  // through the derivative of the layer).                            //DEEPVIS manual addition
+  optional bool deconv_ignore = 7 [default = false];                  //DEEPVIS manual addition
+
 }
 
 message MemoryDataParameter {
@@ -889,6 +903,7 @@ message PoolingParameter {
     MAX = 0;
     AVE = 1;
     STOCHASTIC = 2;
+    CMAX = 3; //Added by AMOGH/NICOLAI
   }
   optional PoolMethod pool = 1 [default = MAX]; // The pooling method
   // Pad, kernel size, and stride are all given as a single value for equal
@@ -1401,4 +1416,15 @@ message PReLUParameter {
   optional FillerParameter filler = 1;
   // Whether or not slope parameters are shared across channels.
   optional bool channel_shared = 2 [default = false];
+}
+
+message LpParameter {
+  //LP params of LP Pooling layer https://arxiv.org/pdf/1311.1780.pdf //ADDED BY AMOGH/NICOLAI
+
+  // Initial value of p_i. Default is p_i=2 for all i.
+  optional FillerParameter p_filler = 1;
+  // Whether or not power parameters are shared across channels.
+  optional bool channel_shared = 2 [default = true];
+  // Whether or not to normalize input values of pooling between [-1,1] (x_i/max(|x_i|))
+  optional bool normalize_input = 3 [default = true];
 }

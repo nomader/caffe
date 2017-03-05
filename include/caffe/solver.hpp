@@ -66,6 +66,7 @@ class Solver {
   // function that produces a SolverState protocol buffer that needs to be
   // written to disk together with the learned net.
   void Snapshot();
+  void SnapshotToFilename(string model_filename); // Custom Snapshot function that uses custom filename: snapshot_prfix + model_filename by AMOGH/NICOLAI
   virtual ~Solver() {}
   inline const SolverParameter& param() const { return param_; }
   inline shared_ptr<Net<Dtype> > net() { return net_; }
@@ -99,15 +100,18 @@ class Solver {
   virtual void ApplyUpdate() = 0;
   string SnapshotFilename(const string extension);
   string SnapshotToBinaryProto();
+  string SnapshotToBinaryProto(string model_filename); //Added by AMOGH/NICOLAI
   string SnapshotToHDF5();
+  string SnapshotToHDF5(string model_filename); //Added by AMOGH/NICOLAI
   // The test routine
   void TestAll();
   void Test(const int test_net_id = 0);
-  virtual void SnapshotSolverState(const string& model_filename) = 0;
+  virtual void SnapshotSolverState(const string& model_filename, bool samename = false) = 0;
   virtual void RestoreSolverStateFromHDF5(const string& state_file) = 0;
   virtual void RestoreSolverStateFromBinaryProto(const string& state_file) = 0;
   void DisplayOutputBlobs(const int net_id);
   void UpdateSmoothedLoss(Dtype loss, int start_iter, int average_loss);
+  void UpdateSmoothedOutputs(vector<Dtype> outputs, int start_iter, int average_output); //Added by AMOGH
 
   SolverParameter param_;
   int iter_;
@@ -117,6 +121,13 @@ class Solver {
   vector<Callback*> callbacks_;
   vector<Dtype> losses_;
   Dtype smoothed_loss_;
+  vector<vector<Dtype>> outputss_; //Added by AMOGH
+  vector<Dtype> smoothed_outputs_; //Added by AMOGH
+
+  //Stopping criterion by AMOGH/NICOLAI
+  int patience_;
+  Dtype high_score_;
+  bool first_test_done_;
 
   // A function that can be set by a client of the Solver to provide indication
   // that it wants a snapshot saved and/or to exit early.

@@ -64,9 +64,24 @@ private:\
       const std::vector<bool>& propagate_down, \
       const std::vector<Blob<double>*>& bottom)
 
+#define INSTANTIATE_LAYER_GPU_DECONV(classname) \
+  template void classname<float>::Deconv_gpu( \
+      const std::vector<Blob<float>*>& top, \
+      const std::vector<bool>& propagate_down, \
+      const std::vector<Blob<float>*>& bottom); \
+  template void classname<double>::Deconv_gpu( \
+      const std::vector<Blob<double>*>& top, \
+      const std::vector<bool>& propagate_down, \
+      const std::vector<Blob<double>*>& bottom)
+
 #define INSTANTIATE_LAYER_GPU_FUNCS(classname) \
   INSTANTIATE_LAYER_GPU_FORWARD(classname); \
   INSTANTIATE_LAYER_GPU_BACKWARD(classname)
+
+#define INSTANTIATE_LAYER_GPU_FUNCS_WITH_DECONV(classname)  \
+  INSTANTIATE_LAYER_GPU_FORWARD(classname); \
+  INSTANTIATE_LAYER_GPU_BACKWARD(classname); \
+  INSTANTIATE_LAYER_GPU_DECONV(classname)
 
 // A simple macro to mark codes that are not implemented, so that when the code
 // is executed we will see a fatal log.
@@ -164,11 +179,8 @@ class Caffe {
   // Parallel training
   inline static int solver_count() { return Get().solver_count_; }
   inline static void set_solver_count(int val) { Get().solver_count_ = val; }
-  inline static int solver_rank() { return Get().solver_rank_; }
-  inline static void set_solver_rank(int val) { Get().solver_rank_ = val; }
-  inline static bool multiprocess() { return Get().multiprocess_; }
-  inline static void set_multiprocess(bool val) { Get().multiprocess_ = val; }
-  inline static bool root_solver() { return Get().solver_rank_ == 0; }
+  inline static bool root_solver() { return Get().root_solver_; }
+  inline static void set_root_solver(bool val) { Get().root_solver_ = val; }
 
  protected:
 #ifndef CPU_ONLY
@@ -178,11 +190,8 @@ class Caffe {
   shared_ptr<RNG> random_generator_;
 
   Brew mode_;
-
-  // Parallel training
   int solver_count_;
-  int solver_rank_;
-  bool multiprocess_;
+  bool root_solver_;
 
  private:
   // The private constructor to avoid duplicate instantiation.

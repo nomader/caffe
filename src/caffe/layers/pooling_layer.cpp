@@ -68,8 +68,10 @@ void PoolingLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
     CHECK(this->layer_param_.pooling_param().pool()
         == PoolingParameter_PoolMethod_AVE
         || this->layer_param_.pooling_param().pool()
-        == PoolingParameter_PoolMethod_MAX)
-        << "Padding implemented only for average and max pooling.";
+        == PoolingParameter_PoolMethod_MAX
+		|| this->layer_param_.pooling_param().pool()
+		== PoolingParameter_PoolMethod_CMAX) //Added by AMOGH
+        << "Padding implemented only for average and max/cmax pooling.";
     CHECK_LT(pad_h_, kernel_h_);
     CHECK_LT(pad_w_, kernel_w_);
   }
@@ -114,6 +116,12 @@ void PoolingLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
     max_idx_.Reshape(bottom[0]->num(), channels_, pooled_height_,
         pooled_width_);
   }
+  // If cmax pooling, we will initialize the vector index part. //Added by AMOGH
+  if (this->layer_param_.pooling_param().pool() ==
+	  PoolingParameter_PoolMethod_CMAX && top.size() == 1) {
+	  max_idx_.Reshape(bottom[0]->num(), channels_, pooled_height_,
+		  pooled_width_);
+  }
   // If stochastic pooling, we will initialize the random index part.
   if (this->layer_param_.pooling_param().pool() ==
       PoolingParameter_PoolMethod_STOCHASTIC) {
@@ -137,7 +145,8 @@ void PoolingLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   // Different pooling methods. We explicitly do the switch outside the for
   // loop to save time, although this results in more code.
   switch (this->layer_param_.pooling_param().pool()) {
-  case PoolingParameter_PoolMethod_MAX:
+  case PoolingParameter_PoolMethod_MAX: 
+  case PoolingParameter_PoolMethod_CMAX: //Added by AMOGH
     // Initialize
     if (use_top_mask) {
       top_mask = top[1]->mutable_cpu_data();
@@ -234,6 +243,8 @@ void PoolingLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
   }
   const Dtype* top_diff = top[0]->cpu_diff();
   Dtype* bottom_diff = bottom[0]->mutable_cpu_diff();
+  const Dtype* top_data = top[0]->cpu_data(); //Added by AMOGH
+  const Dtype* bottom_data = bottom[0]->cpu_data(); //Added by AMOGH
   // Different pooling methods. We explicitly do the switch outside the for
   // loop to save time, although this results in more codes.
   caffe_set(bottom[0]->count(), Dtype(0), bottom_diff);
@@ -301,6 +312,36 @@ void PoolingLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
   case PoolingParameter_PoolMethod_STOCHASTIC:
     NOT_IMPLEMENTED;
     break;
+  case PoolingParameter_PoolMethod_CMAX: //Added by AMOGH
+	  // The main loop
+	  for (int n = 0; n < top[0]->num(); ++n) {
+		  for (int c = 0; c < channels_; ++c) {
+			  for (int ph = 0; ph < pooled_height_; ++ph) {
+				  for (int pw = 0; pw < pooled_width_; ++pw) {
+					  int hstart = ph * stride_h_ - pad_h_;
+					  int wstart = pw * stride_w_ - pad_w_;
+					  int hend = min(hstart + kernel_h_, height_ + pad_h_);
+					  int wend = min(wstart + kernel_w_, width_ + pad_w_);
+					  int pool_size = (hend - hstart) * (wend - wstart);
+					  hstart = max(hstart, 0);
+					  wstart = max(wstart, 0);
+					  hend = min(hend, height_);
+					  wend = min(wend, width_);
+					  for (int h = hstart; h < hend; ++h) {
+						  for (int w = wstart; w < wend; ++w) { //delta_x_n = delta_y * x_n / y; where y = max(X)
+							  bottom_diff[h * width_ + w] += 
+								  top_diff[ph * pooled_width_ + pw] 
+								  * bottom_data[h * width_ + w] / (top_data[ph * pooled_width_ + pw] == 0 ? 1 : top_data[ph * pooled_width_ + pw]);
+						  }
+					  }
+				  }
+			  }
+			  // offset
+			  bottom_diff += bottom[0]->offset(0, 1);
+			  top_diff += top[0]->offset(0, 1);
+		  }
+	  }
+	  break;
   default:
     LOG(FATAL) << "Unknown pooling method.";
   }

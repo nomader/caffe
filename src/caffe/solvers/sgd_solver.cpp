@@ -101,9 +101,9 @@ void SGDSolver<Dtype>::ClipGradients() {
 template <typename Dtype>
 void SGDSolver<Dtype>::ApplyUpdate() {
   Dtype rate = GetLearningRate();
-  if (this->param_.display() && this->iter_ % this->param_.display() == 0) {
-    LOG_IF(INFO, Caffe::root_solver()) << "Iteration " << this->iter_
-        << ", lr = " << rate;
+  if ((this->param_.display() && this->iter_ % this->param_.display() == 0) 
+      || this->iter_ % this->param_.average_loss() == 0) { //Extra condition added by AMOGH
+    LOG(INFO) << "Iteration " << this->iter_ << ", lr = " << rate;
   }
   ClipGradients();
   for (int param_id = 0; param_id < this->net_->learnable_params().size();
@@ -243,22 +243,24 @@ void SGDSolver<Dtype>::ComputeUpdateValue(int param_id, Dtype rate) {
 }
 
 template <typename Dtype>
-void SGDSolver<Dtype>::SnapshotSolverState(const string& model_filename) {
+void SGDSolver<Dtype>::SnapshotSolverState(const string& model_filename, bool samename) {
   switch (this->param_.snapshot_format()) {
     case caffe::SolverParameter_SnapshotFormat_BINARYPROTO:
-      SnapshotSolverStateToBinaryProto(model_filename);
+        SnapshotSolverStateToBinaryProto(model_filename, samename);
       break;
     case caffe::SolverParameter_SnapshotFormat_HDF5:
-      SnapshotSolverStateToHDF5(model_filename);
+        SnapshotSolverStateToHDF5(model_filename, samename);
       break;
     default:
       LOG(FATAL) << "Unsupported snapshot format.";
   }
 }
 
+//samename to make solverstate have samename as caffemodel (plus extention) added by AMOGH/NICOLAI
 template <typename Dtype>
 void SGDSolver<Dtype>::SnapshotSolverStateToBinaryProto(
-    const string& model_filename) {
+    const string& model_filename, 
+    bool samename) {
   SolverState state;
   state.set_iter(this->iter_);
   state.set_learned_net(model_filename);
@@ -269,17 +271,26 @@ void SGDSolver<Dtype>::SnapshotSolverStateToBinaryProto(
     BlobProto* history_blob = state.add_history();
     history_[i]->ToProto(history_blob);
   }
-  string snapshot_filename = Solver<Dtype>::SnapshotFilename(".solverstate");
+  string snapshot_filename;
+  if (samename) 
+      snapshot_filename = model_filename + ".solverstate";
+  else 
+      snapshot_filename = Solver<Dtype>::SnapshotFilename(".solverstate");
   LOG(INFO)
     << "Snapshotting solver state to binary proto file " << snapshot_filename;
   WriteProtoToBinaryFile(state, snapshot_filename.c_str());
 }
 
+//samename to make solverstate have samename as caffemodel (plus extention) added by AMOGH/NICOLAI
 template <typename Dtype>
 void SGDSolver<Dtype>::SnapshotSolverStateToHDF5(
-    const string& model_filename) {
-  string snapshot_filename =
-      Solver<Dtype>::SnapshotFilename(".solverstate.h5");
+    const string& model_filename,
+    bool samename) {
+  string snapshot_filename;
+  if(samename) 
+      snapshot_filename = model_filename + ".solverstate.h5";
+  else 
+      snapshot_filename = Solver<Dtype>::SnapshotFilename(".solverstate.h5");
   LOG(INFO) << "Snapshotting solver state to HDF5 file " << snapshot_filename;
   hid_t file_hid = H5Fcreate(snapshot_filename.c_str(), H5F_ACC_TRUNC,
       H5P_DEFAULT, H5P_DEFAULT);

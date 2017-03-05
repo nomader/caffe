@@ -31,9 +31,9 @@ class SGDSolver : public Solver<Dtype> {
   virtual void Regularize(int param_id);
   virtual void ComputeUpdateValue(int param_id, Dtype rate);
   virtual void ClipGradients();
-  virtual void SnapshotSolverState(const string& model_filename);
-  virtual void SnapshotSolverStateToBinaryProto(const string& model_filename);
-  virtual void SnapshotSolverStateToHDF5(const string& model_filename);
+  virtual void SnapshotSolverState(const string& model_filename, bool samename = false); //samename to make solverstate have samename as caffemodel (plus extention) added by AMOGH/NICOLAI
+  virtual void SnapshotSolverStateToBinaryProto(const string& model_filename, bool samename = false); //samename to make solverstate have samename as caffemodel (plus extention) added by AMOGH/NICOLAI
+  virtual void SnapshotSolverStateToHDF5(const string& model_filename, bool samename = false); //samename to make solverstate have samename as caffemodel (plus extention) added by AMOGH/NICOLAI
   virtual void RestoreSolverStateFromHDF5(const string& state_file);
   virtual void RestoreSolverStateFromBinaryProto(const string& state_file);
   // history maintains the historical momentum data.

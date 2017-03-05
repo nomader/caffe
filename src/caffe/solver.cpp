@@ -175,6 +175,9 @@ void Solver<Dtype>::InitTestNets() {
     test_nets_[i].reset(new Net<Dtype>(net_params[i]));
     test_nets_[i]->set_debug_info(param_.debug_info());
   }
+
+  patience_ = abs(param_.init_patience()); //reset patience with absolute value of init_patience for countdown to zero
+  first_test_done_ = false; //Added by AMOGH/NICOLAI
 }
 
 template <typename Dtype>
@@ -183,6 +186,7 @@ void Solver<Dtype>::Step(int iters) {
   const int stop_iter = iter_ + iters;
   int average_loss = this->param_.average_loss();
   losses_.clear();
+  outputss_.clear(); //Added by AMOGH
   smoothed_loss_ = 0;
   iteration_timer_.Start();
 
@@ -207,12 +211,40 @@ void Solver<Dtype>::Step(int iters) {
     net_->set_debug_info(display && param_.debug_info());
     // accumulate the loss and gradient
     Dtype loss = 0;
+    vector<Dtype> outputs; //Added by AMOGH
+    vector<string> output_names; //Added by AMOGH
     for (int i = 0; i < param_.iter_size(); ++i) {
       loss += net_->ForwardBackward();
+      //Added by AMOGH
+      const vector<Blob<Dtype>*>& result = net_->output_blobs();
+      for (int j = 0; j < result.size(); ++j) {
+          const Dtype* result_vec = result[j]->cpu_data();
+          const string& output_name = net_->blob_names()[net_->output_blob_indices()[j]];
+          int xx = result[j]->count();
+          for (int k = 0; k < result[j]->count(); ++k) 
+          {
+            if (outputs.size() < j*result.size() + k + 1) //expecting k = 1 usually
+            {
+                outputs.push_back(result_vec[k]);
+                output_names.push_back(output_name);
+            }
+            else
+            {
+                outputs[j*result.size() + k] += result_vec[k];
+            }
+          }
+      }
     }
     loss /= param_.iter_size();
+	for (int i = 0; i < outputs.size(); i++)
+    {
+        outputs[i] /= param_.iter_size();
+    }
+	
     // average the loss across iterations for smoothed reporting
     UpdateSmoothedLoss(loss, start_iter, average_loss);
+    UpdateSmoothedOutputs(outputs, start_iter, average_loss); //Added by AMOGH
+
     if (display) {
       float lapse = iteration_timer_.Seconds();
       float per_s = (iter_ - iterations_last_) / (lapse ? lapse : 1);
@@ -241,6 +273,18 @@ void Solver<Dtype>::Step(int iters) {
         }
       }
     }
+
+    //Display average loss and outputs irrespective of display parameter //Added by AMOGH
+    if (iter_ % average_loss == 0) {
+        ostringstream stream;
+        stream << "Iteration " << iter_ << ", loss = " << smoothed_loss_ << " [";
+        for (int i = 0; i < outputs.size(); ++i)
+        {
+            stream << output_names[i] << " = " << smoothed_outputs_[i] << (i < outputs.size() - 1 ? ", " : "]");
+        }
+        LOG_IF(INFO, Caffe::root_solver()) << stream.str();
+    }
+
     for (int i = 0; i < callbacks_.size(); ++i) {
       callbacks_[i]->on_gradients_ready();
     }
@@ -301,14 +345,43 @@ void Solver<Dtype>::Solve(const char* resume_file) {
   // training, for the train net we only run a forward pass as we've already
   // updated the parameters "max_iter" times -- this final pass is only done to
   // display the loss, which is computed in the forward pass.
-  if (param_.display() && iter_ % param_.display() == 0) {
-    int average_loss = this->param_.average_loss();
-    Dtype loss;
-    net_->Forward(&loss);
+  int average_loss = this->param_.average_loss();
+  if ((param_.display() && iter_ % param_.display() == 0) || iter_ % average_loss == 0) { //Extra average_loss condition added by AMOGH
+	Dtype loss;
+	net_->Forward(&loss);
+	//Added by AMOGH
+	vector<Dtype> outputs; //Added by AMOGH
+	vector<string> output_names; //Added by AMOGH
+	const vector<Blob<Dtype>*>& result = net_->output_blobs();
+	for (int j = 0; j < result.size(); ++j) {
+		const Dtype* result_vec = result[j]->cpu_data();
+		const string& output_name = net_->blob_names()[net_->output_blob_indices()[j]];
+		int xx = result[j]->count();
+		for (int k = 0; k < result[j]->count(); ++k)
+		{
+			if (outputs.size() < j*result.size() + k + 1) //expecting k = 1 usually
+			{
+				outputs.push_back(result_vec[k]);
+				output_names.push_back(output_name);
+			}
+			else
+			{
+				outputs[j*result.size() + k] += result_vec[k];
+			}
+		}
+	}
 
-    UpdateSmoothedLoss(loss, start_iter, average_loss);
+	UpdateSmoothedLoss(loss, start_iter, average_loss);
+	UpdateSmoothedOutputs(outputs, start_iter, average_loss); //Added by AMOGH
 
-    LOG(INFO) << "Iteration " << iter_ << ", loss = " << smoothed_loss_;
+	//Added by Amogh
+	ostringstream stream;
+	stream << "Iteration " << iter_ << ", loss = " << smoothed_loss_ << " [";
+	for (int i = 0; i < outputs.size(); ++i)
+	{
+		stream << output_names[i] << " = " << smoothed_outputs_[i] << (i < outputs.size() - 1?", ":"]");
+	}
+	LOG_IF(INFO, Caffe::root_solver()) << stream.str();
   }
   if (param_.test_interval() && iter_ % param_.test_interval() == 0) {
     TestAll();
@@ -397,6 +470,32 @@ void Solver<Dtype>::Test(const int test_net_id) {
     }
     LOG(INFO) << "    Test net output #" << i << ": " << output_name << " = "
               << mean_score << loss_msg_stream.str();
+
+	  //Stopping criterion by AMOGH/NICOLAI
+	  if (param_.has_stopper_name() && output_name.compare(param_.stopper_name()) == 0)
+	  {
+		  if ( !first_test_done_ //if net has never been tested before, set high score to current (first) score
+			|| (param_.init_patience() >= 0 && mean_score > high_score_)   //if init_patience is +ve, high score is highest value
+			|| (param_.init_patience() <  0 && mean_score < high_score_) ) //if init_patience is -ve, high score is lowest value
+		  {
+			  high_score_ = mean_score;
+			  patience_ = abs(param_.init_patience()); //reset patience with absolute value of init_patience for countdown to zero
+			  first_test_done_ = true; //net has now been tested at least once
+			  LOG(INFO) << "    [New High Score!] " << output_name << " = " << high_score_ << " [Patience restored: " << patience_ << "]";
+			  SnapshotToFilename("best_model");
+		  }
+		  else
+		  {
+			  patience_--;
+			  LOG(INFO) << "    [Old High Score] " << output_name << " = " << high_score_ << " [Patience running out: " << patience_ << "]";
+		  }
+
+		  if (patience_ <= 0)
+		  {
+			  requested_early_exit_ = true;
+			  LOG(INFO) << "    [Game Over!] [Out of patience: " << patience_ << "]";
+		  }
+	  }
   }
 }
 
@@ -416,6 +515,24 @@ void Solver<Dtype>::Snapshot() {
   }
 
   SnapshotSolverState(model_filename);
+}
+
+//Custom filename Snapshot function by AMOGH/NICOLAI
+template <typename Dtype>
+void Solver<Dtype>::SnapshotToFilename(string model_filename) {
+  CHECK(Caffe::root_solver());
+  switch (param_.snapshot_format()) {
+  case caffe::SolverParameter_SnapshotFormat_BINARYPROTO:
+	model_filename = SnapshotToBinaryProto(model_filename);
+	break;
+  case caffe::SolverParameter_SnapshotFormat_HDF5:
+	model_filename = SnapshotToHDF5(model_filename);
+	break;
+  default:
+	LOG(FATAL) << "Unsupported snapshot format.";
+  }
+
+  SnapshotSolverState(model_filename, true);
 }
 
 template <typename Dtype>
@@ -452,9 +569,29 @@ string Solver<Dtype>::SnapshotToBinaryProto() {
   return model_filename;
 }
 
+// Overriden w/ Custom filename by AMOGH/NICOLAI
+template <typename Dtype>
+string Solver<Dtype>::SnapshotToBinaryProto(string model_filename) {
+  model_filename = param_.snapshot_prefix() + model_filename + ".caffemodel";
+  LOG(INFO) << "Snapshotting to binary proto file " << model_filename;
+  NetParameter net_param;
+  net_->ToProto(&net_param, param_.snapshot_diff());
+  WriteProtoToBinaryFile(net_param, model_filename);
+  return model_filename;
+}
+
 template <typename Dtype>
 string Solver<Dtype>::SnapshotToHDF5() {
   string model_filename = SnapshotFilename(".caffemodel.h5");
+  LOG(INFO) << "Snapshotting to HDF5 file " << model_filename;
+  net_->ToHDF5(model_filename, param_.snapshot_diff());
+  return model_filename;
+}
+
+// Overriden w/ Custom filename by AMOGH/NICOLAI
+template <typename Dtype>
+string Solver<Dtype>::SnapshotToHDF5(string model_filename) {
+  model_filename = param_.snapshot_prefix() + model_filename + ".caffemodel.h5";
   LOG(INFO) << "Snapshotting to HDF5 file " << model_filename;
   net_->ToHDF5(model_filename, param_.snapshot_diff());
   return model_filename;
@@ -483,6 +620,29 @@ void Solver<Dtype>::UpdateSmoothedLoss(Dtype loss, int start_iter,
     smoothed_loss_ += (loss - losses_[idx]) / average_loss;
     losses_[idx] = loss;
   }
+}
+
+template <typename Dtype>
+void Solver<Dtype>::UpdateSmoothedOutputs(vector<Dtype> outputs, int start_iter,
+	int average_output) {
+	for (int i = 0; i < outputs.size(); ++i)
+	{
+		if (outputss_.size() < i + 1) //Initialize the first time
+			outputss_.push_back(vector<Dtype>()); //inititalize with empty vector
+		if (smoothed_outputs_.size() < i + 1) //Initialize the first time
+			smoothed_outputs_.push_back(Dtype(0)); //inititalize with zero
+			
+		if (outputss_[i].size() < average_output) {
+			outputss_[i].push_back(outputs[i]);
+			int size = outputss_[i].size();
+			smoothed_outputs_[i] = (smoothed_outputs_[i] * (size - 1) + outputs[i]) / size;
+		}
+		else {
+			int idx = (iter_ - start_iter) % average_output;
+			smoothed_outputs_[i] += (outputs[i] - outputss_[i][idx]) / average_output;
+			outputss_[i][idx] = outputs[i];
+		}
+	}
 }
 
 INSTANTIATE_CLASS(Solver);
