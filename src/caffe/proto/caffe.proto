@@ -98,7 +98,7 @@ message NetParameter {
 // NOTE
 // Update the next available ID when you add a new SolverParameter field.
 //
-// SolverParameter next available ID: 43 (last added: init_patience)
+// SolverParameter next available ID: 44 (last added: init_patience)
 message SolverParameter {
   //////////////////////////////////////////////////////////////////////////////
   // Specifying the train and test networks
@@ -241,8 +241,8 @@ message SolverParameter {
   optional SolverType solver_type = 30 [default = SGD];
   
   //Stopping criterion parameters added by AMOGH/NICOLAI
-  optional string stopper_name = 41 [default = ""];
-  optional int32 init_patience = 42 [default = 15]; // Give -ve value to maintain lowest value as high score (e.g., to maintain best loss); else +ve value (e.g., for best accuracy)
+  optional string stopper_name = 42 [default = ""];
+  optional int32 init_patience = 43 [default = 15]; // Give -ve value to maintain lowest value as high score (e.g., to maintain best loss); else +ve value (e.g., for best accuracy)
 
 
   // Overlap compute and communication for data parallel training
@@ -413,6 +413,8 @@ message LayerParameter {
   optional ThresholdParameter threshold_param = 128;
   optional TileParameter tile_param = 138;
   optional WindowDataParameter window_data_param = 129;
+  
+  optional LpParameter lp_param = 147; //ADDED BY AMOGH/NICOLAI
 }
 
 // Message that stores parameters used to apply transformation

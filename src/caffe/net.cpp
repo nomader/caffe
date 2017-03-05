@@ -580,6 +580,7 @@ void Net<Dtype>::BackwardFromTo(int start, int end) {
     }
     for (int c = 0; c < after_backward_.size(); ++c) {
       after_backward_[c]->run(i);
+    }
   }
 }
 

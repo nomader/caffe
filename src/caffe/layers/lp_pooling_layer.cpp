@@ -7,6 +7,8 @@
 #include "caffe/util/math_functions.hpp"
 #include "caffe/filler.hpp"
 
+using namespace std; //Added by AMOGH because of VS14 error: 'max': identifier not found
+
 namespace caffe {
 
 template <typename Dtype>
