@@ -1,3 +1,15 @@
+# \m/ Amogh's better Caffe \m/
+
+**The 'windows' branch of this repository is a fork of the ['windows' branch of BLVC/Caffe](https://github.com/BVLC/caffe/tree/windows).**
+This version adds some additional stuff to the original caffe, that aid in better network training:
+- Patience stopping criterion
+- Epoch Averaged output for all network outputs (not just loss)
+- Better logging text + better log parsing script + better log plotting script (log parsing script probably incompatible with logs of original BLVC/caffe)
+- Lp pooling with a learnable p-parameter (based off this: [A Theoretical Analysis of Feature Pooling in Visual Recognition](http://machinelearning.wustl.edu/mlpapers/paper_files/icml2010_BoureauPL10.pdf))
+- Continous Max pooling type option to pooling layer (own invention, probably doesn't work well.)
+
+Some of these are PR worthy to the official caffe, but I'm too lazy/cool for that shit. Cheers!
+
 # Windows Caffe
 
 **This is an experimental, communtity based branch led by Guillaume Dumont (@willyd). It is a work-in-progress.**
