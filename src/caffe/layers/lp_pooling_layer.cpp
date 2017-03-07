@@ -212,14 +212,6 @@ void LpPoolingLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
     }
 }
 
-//Fake GPU version: actually calls CPU version
-template <typename Dtype>
-void Forward_gpu(const vector<Blob<Dtype>*>& bottom,
-    const vector<Blob<Dtype>*>& top) {
-    // LOG(WARNING) << "Using CPU code as backup.";
-    return Forward_cpu(bottom, top);
-}
-
 template <typename Dtype>
 void LpPoolingLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 	const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom) {
@@ -298,14 +290,22 @@ void LpPoolingLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     }
 }
 
-//Fake GPU version: actually calls CPU version
-template <typename Dtype>
-void Backward_gpu(const vector<Blob<Dtype>*>& top,
-    const vector<bool>& propagate_down,
-    const vector<Blob<Dtype>*>& bottom) {
-    // LOG(WARNING) << "Using CPU code as backup.";
-    Backward_cpu(top, propagate_down, bottom);
-}
+//#ifdef CPU_ONLY
+//template <typename Dtype>
+//void Forward_gpu(const vector<Blob<Dtype>*>& bottom,
+//    const vector<Blob<Dtype>*>& top) {
+//    // LOG(WARNING) << "Using CPU code as backup.";
+//    return Forward_cpu(bottom, top);
+//}
+//
+//template <typename Dtype>
+//void Backward_gpu(const vector<Blob<Dtype>*>& top,
+//    const vector<bool>& propagate_down,
+//    const vector<Blob<Dtype>*>& bottom) {
+//    // LOG(WARNING) << "Using CPU code as backup.";
+//    Backward_cpu(top, propagate_down, bottom);
+//}
+//#endif
 
 template <typename Dtype>
 bool LpPoolingLayer<Dtype>::abs_compare(Dtype a, Dtype b)

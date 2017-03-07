@@ -31,13 +31,25 @@ class LpPoolingLayer : public PoolingLayer<Dtype> {
  protected:
   virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
-  virtual void Forward_gpu(const vector<Blob<Dtype>*>& bottom,
-      const vector<Blob<Dtype>*>& top);
   virtual void Backward_cpu(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
+#ifndef CPU_ONLY
+  virtual void Forward_gpu(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top) {
+      // LOG(WARNING) << "Using CPU code as backup.";
+      return Forward_cpu(bottom, top);
+  }
   virtual void Backward_gpu(const vector<Blob<Dtype>*>& top,
-      const vector<bool>& propagate_down,
-      const vector<Blob<Dtype>*>& bottom);
+      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom) {
+      // LOG(WARNING) << "Using CPU code as backup.";
+      Backward_cpu(top, propagate_down, bottom);
+  }
+#else
+  virtual void Forward_gpu(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
+  virtual void Backward_gpu(const vector<Blob<Dtype>*>& top,
+      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
+#endif
 
   bool channel_shared_; //Parameter for sharing single p over all channels  
   bool normalize_input_; //Parameter for normalizing input values of pooling between [-1,1] (x_i/max(|x_i|))
