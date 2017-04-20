@@ -5,6 +5,7 @@
 #include <boost/python.hpp>
 #include <boost/python/raw_function.hpp>
 #include <boost/python/suite/indexing/vector_indexing_suite.hpp>
+#include <google/protobuf/text_format.h>
 #include <numpy/arrayobject.h>
 
 // these need to be included after boost on OS X
@@ -235,6 +236,25 @@ Solver<Dtype>* GetSolverFromFile(const string& filename) {
   return SolverRegistry<Dtype>::CreateSolver(param);
 }
 
+Solver<Dtype>* GetSolverFromString(const string& proto_txt) {
+  using google::protobuf::TextFormat;
+  SolverParameter param;
+  bool success = TextFormat::ParseFromString(proto_txt, &param);
+  if (!success)
+    LOG(FATAL) << "Malformatted proto_txt string";
+  return SolverRegistry<Dtype>::CreateSolver(param);
+}
+
+Net<Dtype>* GetNetFromString(const string& proto_txt, int phase) {
+  using google::protobuf::TextFormat;
+  NetParameter param;
+  bool success = TextFormat::ParseFromString(proto_txt, &param);
+  param.mutable_state()->set_phase(static_cast<Phase>(phase));
+  if (!success)
+    LOG(FATAL) << "Malformatted proto_txt string";
+  return new Net<Dtype>(param);
+}
+
 struct NdarrayConverterGenerator {
   template <typename T> struct apply;
 };
@@ -334,6 +354,11 @@ void Solver_add_nccl(SGDSolver<Dtype>* solver
   solver->add_callback(nccl);
 #endif
 }
+void waitForCuda() {
+#ifndef CPU_ONLY
+  cudaDeviceSynchronize();
+#endif
+}
 
 template<typename Dtype>
 class NetCallback: public Net<Dtype>::Callback {
@@ -397,6 +422,7 @@ BOOST_PYTHON_MODULE(_caffe) {
   bp::def("solver_rank", &Caffe::solver_rank);
   bp::def("set_solver_rank", &Caffe::set_solver_rank);
   bp::def("set_multiprocess", &Caffe::set_multiprocess);
+  bp::def("wait_for_cuda", &waitForCuda);
 
   bp::def("layer_type_list", &LayerRegistry<Dtype>::LayerTypeList);
 
@@ -520,6 +546,10 @@ BOOST_PYTHON_MODULE(_caffe) {
         "AdamSolver", bp::init<string>());
 
   bp::def("get_solver", &GetSolverFromFile,
+      bp::return_value_policy<bp::manage_new_object>());
+  bp::def("get_solver_from_string", &GetSolverFromString,
+      bp::return_value_policy<bp::manage_new_object>());
+  bp::def("get_net_from_string", &GetNetFromString,
       bp::return_value_policy<bp::manage_new_object>());
 
   // vector wrappers for all the vector types we use
